@@ -6,8 +6,7 @@ LIBDIR = $(TMPDIR)/libpg_query
 LIBDIRGZ = $(TMPDIR)/libpg_query-$(LIB_PG_QUERY_TAG).tar.gz
 FLATTENDIR = $(TMPDIR)/flatten
 
-default:
-	@echo "Run 'make update_source' if you want to regenerate the JS library"
+default: update_source
 
 .PHONY: flatten_source fix_pg_config update_source
 
@@ -23,13 +22,20 @@ flatten_source: $(LIBDIR)
 	mkdir -p $(FLATTENDIR)
 	rm -f $(FLATTENDIR)/*.{c,h}
 	rm -fr $(FLATTENDIR)/include
+	
 	# Reduce everything down to one directory
 	cp -a $(LIBDIR)/src/* $(FLATTENDIR)/
 	mv $(FLATTENDIR)/postgres/* $(FLATTENDIR)/
 	rmdir $(FLATTENDIR)/postgres
 	cp -a $(LIBDIR)/pg_query.h $(FLATTENDIR)/include
+
 	# Make sure every .c file in the top-level directory is its own translation unit
 	mv $(FLATTENDIR)/*_conds.c $(FLATTENDIR)/*_defs.c $(FLATTENDIR)/*_helper.c $(FLATTENDIR)/*_random.c $(FLATTENDIR)/include
+    
+	# Add Dependencies
+    cp -a "$(LIBDIR)/protobuf" "$(FLATTENDIR)/include/"
+    cp -a "$(LIBDIR)/vendor/protobuf-c" "$(FLATTENDIR)/include/"
+    cp -a "$(LIBDIR)/vendor/xxhash" "$(FLATTENDIR)/include/"
 
 fix_pg_config:
 	echo "#undef HAVE_SIGSETJMP" >> $(FLATTENDIR)/include/pg_config.h
