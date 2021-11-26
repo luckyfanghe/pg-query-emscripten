@@ -5,6 +5,7 @@ TMPDIR = $(root_dir)/tmp
 LIBDIR = $(TMPDIR)/libpg_query
 LIBDIRGZ = $(TMPDIR)/libpg_query-$(LIB_PG_QUERY_TAG).tar.gz
 FLATTENDIR = $(TMPDIR)/flatten
+PROGDIR = $(TMPDIR)/prog
 
 default: update_source
 
@@ -17,6 +18,14 @@ $(LIBDIR): $(LIBDIRGZ)
 $(LIBDIRGZ):
 	mkdir -p $(TMPDIR)
 	curl -o $(LIBDIRGZ) https://codeload.github.com/lfittl/libpg_query/tar.gz/$(LIB_PG_QUERY_TAG)
+
+
+SRCS = $(wildcard $(FLATTENDIR)/*c)
+PROGS = $(patsubst $(FLATTENDIR)/%.c,$(PROGDIR)/%.o,$(SRCS))
+
+$(PROGDIR)/%.o: $(FLATTENDIR)/%.c
+    mkdir -p $(PROGDIR)
+    emcc -O3 -c $< -o $@ -I $(FLATTENDIR)/include
 
 flatten_source: $(LIBDIR)
 	mkdir -p $(FLATTENDIR)
@@ -42,10 +51,13 @@ fix_pg_config:
 	echo "#undef HAVE_SPINLOCKS" >> $(FLATTENDIR)/include/pg_config.h
 	echo "#undef PG_INT128_TYPE" >> $(FLATTENDIR)/include/pg_config.h
 
-update_source: flatten_source fix_pg_config
-	emcc -O3 -o pg_query.o -I $(FLATTENDIR)/include $(FLATTENDIR)/*.c
-	em++ -s EXPORTED_FUNCTIONS="['_normalize', '_parse', '_parse_plpgsql', '_fingerprint']" -I $(FLATTENDIR)/include -O3 --bind --pre-js module.js --memory-init-file 0 -s "WASM=0" -o tmp/pg_query_raw.js pg_query.o entry.cpp
-	rm -f pg_query.o
+update_source: flatten_source fix_pg_config $(PROGS)
+    em++ \
+        -s EXPORTED_FUNCTIONS="['_normalize', '_parse', '_parse_plpgsql', '_fingerprint']" \
+        -I $(FLATTENDIR)/include \
+        -O3 --bind --pre-js module.js --memory-init-file 0 \
+        -s "WASM=0" -o tmp/pg_query_raw.js $(PROGS) entry.cpp
+
 	echo "var PgQuery = (function () {" > pg_query.js
 	cat tmp/pg_query_raw.js >> pg_query.js
 	echo "return { normalize: Module.normalize, parse: Module.parse, parse_plpgsql: Module.parse_plpgsql, fingerprint: Module.fingerprint };" >> pg_query.js
