@@ -31,7 +31,7 @@ typedef struct {
 } PlpgsqlParseResult;
 
 typedef struct {
-  std::string hexdigest;
+  std::string fingerprint_str;
   std::string stderr_buffer;
   ParseError error;
 } FingerprintResult;
@@ -119,7 +119,7 @@ FingerprintResult raw_fingerprint(intptr_t input) {
 		result.stderr_buffer = std::string(tmp_result.stderr_buffer);
 	}
 
-	result.hexdigest = std::string(tmp_result.hexdigest);
+	result.fingerprint_str = std::string(tmp_result.fingerprint_str);
 
 	pg_query_free_fingerprint_result(tmp_result);
 
@@ -144,7 +144,7 @@ EMSCRIPTEN_BINDINGS(my_module) {
 		;
 
 	value_object<FingerprintResult>("FingerprintResult")
-		.field("hexdigest", &FingerprintResult::hexdigest)
+		.field("fingerprint_str", &FingerprintResult::fingerprint_str)
 		.field("stderr_buffer", &FingerprintResult::stderr_buffer)
 		.field("error", &FingerprintResult::error)
 		;
