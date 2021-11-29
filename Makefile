@@ -20,7 +20,7 @@ $(LIBDIRGZ):
 	curl -o $(LIBDIRGZ) https://codeload.github.com/lfittl/libpg_query/tar.gz/$(LIB_PG_QUERY_TAG)
 
 
-SRCS = $(wildcard $(FLATTENDIR)/*c)
+SRCS = $(wildcard $(FLATTENDIR)/*.c)
 PROGS = $(patsubst $(FLATTENDIR)/%.c,$(PROGDIR)/%.o,$(SRCS))
 
 $(PROGDIR)/%.o: $(FLATTENDIR)/%.c
