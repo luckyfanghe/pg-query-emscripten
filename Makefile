@@ -7,7 +7,8 @@ LIBDIRGZ = $(TMPDIR)/libpg_query-$(LIB_PG_QUERY_TAG).tar.gz
 FLATTENDIR = $(TMPDIR)/flatten
 PROGDIR = $(TMPDIR)/prog
 
-default: update_source
+default: flatten_source fix_pg_config 
+	make update_source
 
 .PHONY: flatten_source fix_pg_config update_source
 
@@ -24,14 +25,14 @@ SRCS = $(wildcard $(FLATTENDIR)/*.c)
 PROGS = $(patsubst $(FLATTENDIR)/%.c,$(PROGDIR)/%.o,$(SRCS))
 
 $(PROGDIR)/%.o: $(FLATTENDIR)/%.c
-    mkdir -p $(PROGDIR)
-    emcc -O3 -c $< -o $@ -I $(FLATTENDIR)/include
+	mkdir -p $(PROGDIR)
+	emcc -O3 -c $< -o $@ -I $(FLATTENDIR)/include
 
 flatten_source: $(LIBDIR)
 	mkdir -p $(FLATTENDIR)
 	rm -f $(FLATTENDIR)/*.{c,h}
 	rm -fr $(FLATTENDIR)/include
-	
+
 	# Reduce everything down to one directory
 	cp -a $(LIBDIR)/src/* $(FLATTENDIR)/
 	mv $(FLATTENDIR)/postgres/* $(FLATTENDIR)/
@@ -40,23 +41,31 @@ flatten_source: $(LIBDIR)
 
 	# Make sure every .c file in the top-level directory is its own translation unit
 	mv $(FLATTENDIR)/*_conds.c $(FLATTENDIR)/*_defs.c $(FLATTENDIR)/*_helper.c $(FLATTENDIR)/*_random.c $(FLATTENDIR)/include
-    
+
 	# Add Dependencies
-    cp -a "$(LIBDIR)/protobuf" "$(FLATTENDIR)/include/"
-    cp -a "$(LIBDIR)/vendor/protobuf-c" "$(FLATTENDIR)/include/"
-    cp -a "$(LIBDIR)/vendor/xxhash" "$(FLATTENDIR)/include/"
+	cp -a $(LIBDIR)/protobuf $(FLATTENDIR)/include/
+	cp -a $(LIBDIR)/vendor/protobuf-c $(FLATTENDIR)/include/
+	cp -a $(LIBDIR)/vendor/xxhash $(FLATTENDIR)/include/
+
+	cp -a $(LIBDIR)/protobuf/* $(FLATTENDIR)/
+	cp -a $(LIBDIR)/vendor/protobuf-c/* $(FLATTENDIR)/
+	cp -a $(LIBDIR)/vendor/xxhash/* $(FLATTENDIR)/
 
 fix_pg_config:
 	echo "#undef HAVE_SIGSETJMP" >> $(FLATTENDIR)/include/pg_config.h
 	echo "#undef HAVE_SPINLOCKS" >> $(FLATTENDIR)/include/pg_config.h
 	echo "#undef PG_INT128_TYPE" >> $(FLATTENDIR)/include/pg_config.h
 
-update_source: flatten_source fix_pg_config $(PROGS)
-    em++ \
-        -s EXPORTED_FUNCTIONS="['_normalize', '_parse', '_parse_plpgsql', '_fingerprint']" \
-        -I $(FLATTENDIR)/include \
-        -O3 --bind --pre-js module.js --memory-init-file 0 \
-        -s "WASM=0" -o tmp/pg_query_raw.js $(PROGS) entry.cpp
+update_source: $(PROGS)
+	em++ \
+		-I $(FLATTENDIR)/include \
+		-O3 --bind --no-entry --pre-js module.js\
+		-s LLD_REPORT_UNDEFINED=1 \
+		-s ASSERTIONS=0 \
+		-s SINGLE_FILE=1 \
+		-s ENVIRONMENT=web \
+		-s WASM=0 \
+		-o tmp/pg_query_raw.js $(PROGS) entry.cpp
 
 	echo "var PgQuery = (function () {" > pg_query.js
 	cat tmp/pg_query_raw.js >> pg_query.js
